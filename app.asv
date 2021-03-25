@@ -1,99 +1,141 @@
-addpath(genpath('cnn_utils'));
-X = rand(3, 3, 2);
+%{
+0 T-shirt/top
+1 Trouser
+2 Pullover
+3 Dress
+4 Coat
+5 Sandal
+6 Shirt
+7 Sneaker
+8 Bag
+9 Ankle boot
+%}
 
-% a = zeroPad(X, 2);
+images = loadMNISTImages('dataset/t10k-images-idx3-ubyte');
+images = reshape(images, 28, 28, []);
 
-% TEST CONV FORWARD
-m = 10; n_H_prev = 5; n_W_prev = 7; 
-n_C_prev = 4; n_C = 8; f = 3;
+labels = loadMNISTLabels('dataset/t10k-labels-idx1-ubyte');
+labels(labels == 0) = 10;
 
-A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
-W = ones(f, f, n_C_prev, n_C);
-b = ones(1, 1, 1, n_C);
+% CNN
+n_H = 28; 
+n_W = 28; 
+n_C = 1;
+m = 200; 
 
-A_prev(4, 6, 3, 3) = 4449;
-W(3, 2, 4, 5) = 1234;
-b(1, 1, 1, 5) = -13;
+D = labels(1:m, :);
 
-hparameters.pad = 1;
-hparameters.stride = 2;
+f = 5;
+filters = 2;
+A = zeros(n_H, n_W, n_C, m);
+A(:, :, 1, :) = images(:, :, 1:m);
+size_before = size(A)
+% figure(1);
+% imshow(A(:, :, 1, 1))
 
-[Z, cache_conv] = convForward(A_prev, W, b, hparameters);
+W = rand(f, f, n_C, filters);
+b = rand(1, 1, 1, filters);
 
-fprintf("test conv forward: %i\n", sum(sum(sum(sum(Z))))/(120*8) == 273.6);
+hparameters.pad = 0;
+hparameters.stride = 1;
 
-% TEST POOLING FORWARD
+[Z, cache_conv] = convForward(A, W, b, hparameters);
+size_after = size(Z)
 
-m = 2; n_H_prev = 5; n_W_prev = 5; 
-n_C_prev = 3; f = 3; stride = 1;
-A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
-A_prev(3, 4, 2, 1) = 123;
-A_prev(1, 1, 3, 2) = -12;
+A = reLU(Z);
 
-
-hparameters.f = f;
-hparameters.stride = stride;
-
-[A, cache_pool] = poolForward(A_prev, hparameters, 1);
-fprintf("test pool max forward: %i\n", sum(sum(sum(sum(A)))) == 786.0);
-
-[A, cache_pool] = poolForward(A_prev, hparameters, 2);
-fprintf("test pool average forward: %i\n", ceil(sum(sum(sum(sum(A))))) == 134);
-
-
-% TEST CONV BACKWARD
-m = 10; n_H_prev = 4; n_W_prev = 4; 
-n_C_prev = 3; n_C = 8; f = 2;
-
-A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
-W = ones(f, f, n_C_prev, n_C);
-b = ones(1, 1, 1, n_C);
-
-A_prev(4, 4, 3, 3) = 4449;
-W(2, 2, 3, 8) = 1228;
-b(1, 1, 1, 5) = -13;
-
-hparameters.pad = 2;
-hparameters.stride = 2;
-
-[Z, cache_conv] = convForward(A_prev, W, b, hparameters);
+hparameters.f = 3;
+hparameters.stride = 1;
+[A, cache_pool] = poolForward(A, hparameters, 2);
+size_after = size(A)
 
 
-[dA_prev, dW, db] = convBackward(Z, cache_conv);
+% figure(2);
+% imshow(A(:, :, 1, 1))
 
-fprintf("test backward dA_prev: %i\n", sum(sum(sum(sum(dA_prev)))) == 6829461408.0);
-fprintf("test backward dW: %i\n", sum(sum(sum(sum(dW)))) == 24506518976.0);
-fprintf("test backward db: %i\n", sum(sum(sum(sum(db)))) == 5545240.0);
+final_size = size(A);
 
-% TEST MASK FOR POOLING BACKWAR
 
-mask = createMaskFromWindow([4 2 1; -1 2 3]);
-is_mask_ok = (sum(sum(mask == [1 0 0; 0 0 0])) == 6);
-fprintf("test mask pool backward: %i\n", is_mask_ok);
 
-% TEST POOLING AVERAGE DISTRIBUTE BACKWARD
 
-a = distributeValue(2, 2, 2);
-is_a_ok = (sum(sum(a == [0.5 0.5; 0.5 0.5])) == 4);
-fprintf("test mask pool average backward: %i\n", is_a_ok);
+% NN
+dim_input_nn = final_size(1)*final_size(2)*final_size(3);
 
-% TEST POOL BACKWARD
-m = 5; n_H_prev = 5; n_W_prev = 3; 
-n_C_prev = 2; f = 2; stride = 1;
-A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
-A_prev(1, 2, 1, 1) = 123;
-A_prev(1, 1, 2, 1) = -12;
+WNN = (2*rand(100, dim_input_nn) -1) * sqrt(6)/sqrt(360 + 2000);
+Wo = (2*rand(10, 100) -1) * sqrt(6)/sqrt(10 + 100);
 
-hparameters.f = f;
-hparameters.stride = stride;
+input_NN = zeros(dim_input_nn, m);
+for i = 1:m
+    input_NN(:, i) = reshape(A(:,:,:,i), [], 1);
+end
 
-[A, cache_pool] = poolForward(A_prev, hparameters, 1);
+% primera capa oculta: 
+zNN = WNN*input_NN;
+a = reLU(zNN);
+a_derivate = reLUDerivate(zNN);
 
-dA = ones(4, 2, 2, m);
+% capa de salida
+zNNo = Wo*a;
+y = softmax(zNNo);
 
-dA_prev = poolBackward(dA, cache_pool, 1);
-fprintf("test pool backward max: %i\n", sum(sum(sum(sum(dA_prev))))==313.0);
+% calculo de error
+d = sparseOneHotEncode(D, 10);
+e = d' - y;
 
+
+dWNN = zeros(size(WNN));
+dWo = zeros(size(Wo));
+    
+% backpropagation
+delta = e;
+dWo = dWo + delta * a';
+
+delta2 = Wo' * delta .* a_derivate;
+dWNN = dWNN + delta2 * input_NN';
+
+
+e1 = WNN' * delta2;
+dA = reshape(e1, size(A));
 
 dA_prev = poolBackward(dA, cache_pool, 2);
-fprintf("test pool backward avg: %i\n", sum(sum(sum(sum(dA_prev))))==80.0);
+dA_prev = reLUDerivate(dA_prev);
+[dA_prev, dWCNN, dbCNN] = convBackward(dA_prev, cache_conv);
+
+
+
+
+
+pause;
+% save('MnistConv.mat');
+% 
+% X = images(:, :, 8001:10000);
+% D = labels(8001:10000);
+% 
+% acc = 0;
+% N = length(D);
+% 
+% for k=1:N
+%     x = X(:, :, k);
+%     y1 = convolution(x, W1);
+%     y2 = reLU(y1);
+%     y3 = pool(y2);
+%     y4 = reshape(y3, [], 1);
+%     v5 = W5*y4;
+%     y5 = reLU(v5);
+%     v = Wo*y5;
+%     y = softmax(v);
+
+
+%     [res, ind] = max(y, [], 1);
+%d = sparseOneHotEncode(ind', 10);
+
+%     [~, i] = max(y);
+%     if i == D(k)
+%        acc = acc + 1; 
+%     end
+%     
+% end
+% 
+% acc = acc / N;
+% fprintf('Accuracy is %f\n', acc);
+
