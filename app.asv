@@ -4,14 +4,96 @@ X = rand(3, 3, 2);
 % a = zeroPad(X, 2);
 
 % TEST CONV FORWARD
-m = 10; n_H = 5; n_W = 7; n_C = 8;
+m = 10; n_H_prev = 5; n_W_prev = 7; 
+n_C_prev = 4; n_C = 8; f = 3;
 
-A_prev = rand(n_H, n_W, n_C, m);
-W = np.random.randn(3,3,4,8);
-b = np.random.randn(1,1,1,8);
+A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
+W = ones(f, f, n_C_prev, n_C);
+b = ones(1, 1, 1, n_C);
+
+A_prev(4, 6, 3, 3) = 4449;
+W(3, 2, 4, 5) = 1234;
+b(1, 1, 1, 5) = -13;
+
 hparameters.pad = 1;
-hparameters.stride = 2= {"pad" : 1,
-               "stride": 2}
+hparameters.stride = 2;
 
-Z, cache_conv = conv_forward(A_prev, W, b, hparameters)
-    
+[Z, cache_conv] = convForward(A_prev, W, b, hparameters);
+
+fprintf("test conv forward: %i\n", sum(sum(sum(sum(Z))))/(120*8) == 273.6);
+
+% TEST POOLING FORWARD
+
+m = 2; n_H_prev = 5; n_W_prev = 5; 
+n_C_prev = 3; f = 3; stride = 1;
+A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
+A_prev(3, 4, 2, 1) = 123;
+A_prev(1, 1, 3, 2) = -12;
+
+
+hparameters.f = f;
+hparameters.stride = stride;
+
+[A, cache_pool] = poolForward(A_prev, hparameters, 1);
+fprintf("test pool max forward: %i\n", sum(sum(sum(sum(A)))) == 786.0);
+
+[A, cache_pool] = poolForward(A_prev, hparameters, 2);
+fprintf("test pool average forward: %i\n", ceil(sum(sum(sum(sum(A))))) == 134);
+
+
+% TEST CONV BACKWARD
+m = 10; n_H_prev = 4; n_W_prev = 4; 
+n_C_prev = 3; n_C = 8; f = 2;
+
+A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
+W = ones(f, f, n_C_prev, n_C);
+b = ones(1, 1, 1, n_C);
+
+A_prev(4, 4, 3, 3) = 4449;
+W(2, 2, 3, 8) = 1228;
+b(1, 1, 1, 5) = -13;
+
+hparameters.pad = 2;
+hparameters.stride = 2;
+
+[Z, cache_conv] = convForward(A_prev, W, b, hparameters);
+
+
+[dA_prev, dW, db] = convBackward(Z, cache_conv);
+
+fprintf("test backward dA_prev: %i\n", sum(sum(sum(sum(dA_prev)))) == 6829461408.0);
+fprintf("test backward dW: %i\n", sum(sum(sum(sum(dW)))) == 24506518976.0);
+fprintf("test backward db: %i\n", sum(sum(sum(sum(db)))) == 5545240.0);
+
+% TEST MASK FOR POOLING BACKWAR
+
+mask = createMaskFromWindow([4 2 1; -1 2 3]);
+is_mask_ok = (sum(sum(mask == [1 0 0; 0 0 0])) == 6);
+fprintf("test mask pool backward: %i\n", is_mask_ok);
+
+% TEST POOLING AVERAGE DISTRIBUTE BACKWARD
+
+a = distributeValue(2, 2, 2);
+is_a_ok = (sum(sum(a == [0.5 0.5; 0.5 0.5])) == 4);
+fprintf("test mask pool average backward: %i\n", is_a_ok);
+
+% TEST POOL BACKWARD
+m = 5; n_H_prev = 5; n_W_prev = 3; 
+n_C_prev = 2; f = 2; stride = 1;
+A_prev = ones(n_H_prev, n_W_prev, n_C_prev, m);
+A_prev(1, 2, 1, 1) = 123;
+A_prev(1, 1, 2, 1) = -12;
+
+hparameters.f = f;
+hparameters.stride = stride;
+
+[A, cache_pool] = poolForward(A_prev, hparameters, 1);
+
+dA = ones(4, 2, 2, m);
+
+dA_prev = poolBackward(dA, cache_pool, 1);
+fprintf("test pool backward max: %i\n", sum(sum(sum(sum(dA_prev))))==313.0);
+
+
+dA_prev = poolBackward(dA, cache_pool, 2);
+fprintf("test pool backward avg: %i\n", sum(sum(sum(sum(dA_prev))))==80.0);
